@@ -137,6 +137,11 @@ function parseEventBlock(eventBlock, onDelta, meta) {
     }
 
     const payload = JSON.parse(value);
+
+    if (payload?.error?.message) {
+      throw new Error(String(payload.error.message));
+    }
+
     const delta = extractStreamingDelta(payload);
 
     noteCompletionPayload(meta, payload, delta);
@@ -440,6 +445,9 @@ export class OnscreenAgentSubscriptionLlmClient extends OnscreenAgentLlmClient {
       body: JSON.stringify({
         messages: this.getCompletionMessages(effectiveRequest),
         model: String(effectiveSettings?.model || "").trim(),
+        reasoningEffort: config.normalizeOnscreenAgentCodexReasoningEffort(
+          effectiveSettings?.subscriptionReasoningEffort
+        ),
         systemPrompt: typeof effectiveRequest?.systemPrompt === "string" ? effectiveRequest.systemPrompt : ""
       }),
       headers: {

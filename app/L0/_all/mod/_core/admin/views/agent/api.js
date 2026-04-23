@@ -382,6 +382,11 @@ function parseEventBlock(eventBlock, onDelta, meta) {
     }
 
     const payload = JSON.parse(value);
+
+    if (payload?.error?.message) {
+      throw new Error(String(payload.error.message));
+    }
+
     const delta = extractStreamingDelta(payload);
 
     noteCompletionPayload(meta, payload, delta);
@@ -536,6 +541,9 @@ async function streamAdminAgentSubscriptionCompletion({ promptContext, settings,
     body: JSON.stringify({
       messages: normalizeSubscriptionMessages(apiRequest.requestBody?.messages),
       model: String(settings?.model || "").trim(),
+      reasoningEffort: config.normalizeAdminChatCodexReasoningEffort(
+        settings?.subscriptionReasoningEffort
+      ),
       systemPrompt: apiRequest.systemPrompt
     }),
     headers: {

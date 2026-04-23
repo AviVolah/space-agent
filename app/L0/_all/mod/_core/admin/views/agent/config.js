@@ -12,6 +12,12 @@ export const ADMIN_CHAT_LLM_PROVIDER = {
 export const ADMIN_CHAT_LOCAL_PROVIDER = {
   HUGGINGFACE: "huggingface"
 };
+export const ADMIN_CHAT_CODEX_REASONING_EFFORT = {
+  DEFAULT: "",
+  HIGH: "high",
+  LOW: "low",
+  MEDIUM: "medium"
+};
 
 export const DEFAULT_ADMIN_CHAT_SETTINGS = {
   apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
@@ -23,7 +29,8 @@ export const DEFAULT_ADMIN_CHAT_SETTINGS = {
   model: "openai/gpt-5.4-mini",
   paramsText: "temperature:0.2",
   promptBudgetRatios: { ...DEFAULT_PROMPT_BUDGET_RATIOS },
-  provider: ADMIN_CHAT_LLM_PROVIDER.API
+  provider: ADMIN_CHAT_LLM_PROVIDER.API,
+  subscriptionReasoningEffort: ADMIN_CHAT_CODEX_REASONING_EFFORT.DEFAULT
 };
 
 export function normalizeAdminChatLlmProvider(value) {
@@ -40,6 +47,21 @@ export function normalizeAdminChatLlmProvider(value) {
 
 export function normalizeAdminChatLocalProvider(value) {
   return ADMIN_CHAT_LOCAL_PROVIDER.HUGGINGFACE;
+}
+
+export function normalizeAdminChatCodexReasoningEffort(value) {
+  switch (String(value || "").trim()) {
+    case "minimal":
+      return ADMIN_CHAT_CODEX_REASONING_EFFORT.LOW;
+    case ADMIN_CHAT_CODEX_REASONING_EFFORT.LOW:
+      return ADMIN_CHAT_CODEX_REASONING_EFFORT.LOW;
+    case ADMIN_CHAT_CODEX_REASONING_EFFORT.MEDIUM:
+      return ADMIN_CHAT_CODEX_REASONING_EFFORT.MEDIUM;
+    case ADMIN_CHAT_CODEX_REASONING_EFFORT.HIGH:
+      return ADMIN_CHAT_CODEX_REASONING_EFFORT.HIGH;
+    default:
+      return ADMIN_CHAT_CODEX_REASONING_EFFORT.DEFAULT;
+  }
 }
 
 export function createAdminChatHuggingFaceSelectionValue(modelId, dtype) {

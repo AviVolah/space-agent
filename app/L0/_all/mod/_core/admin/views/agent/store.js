@@ -28,6 +28,8 @@ import {
   serializeAttachmentMetadata
 } from "/mod/_core/admin/views/agent/attachments.js";
 
+const CODEX_STATUS_TIMEOUT_MS = 10000;
+const CODEX_LOGIN_TIMEOUT_MS = 15000;
 const huggingfaceManager = getHuggingFaceManager();
 
 function normalizePromptBudgetSingleMessageRatio(
@@ -270,6 +272,28 @@ function isAbortError(error) {
   return Boolean(error && (error.name === "AbortError" || error.code === 20));
 }
 
+async function callCodexApiWithTimeout(runtime, endpointName, options = {}, timeoutMs = CODEX_STATUS_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutHandle = globalThis.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await runtime.api.call(endpointName, {
+      ...options,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`Timed out waiting for ${endpointName}.`);
+    }
+
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeoutHandle);
+  }
+}
+
 function dataTransferContainsFiles(dataTransfer) {
   if (!dataTransfer) {
     return false;
@@ -371,6 +395,27 @@ function getSubscriptionProviderLabel() {
   return "ChatGPT subscription";
 }
 
+function createCodexReasoningEffortOptions() {
+  return [
+    {
+      label: "Model default",
+      value: config.ADMIN_CHAT_CODEX_REASONING_EFFORT.DEFAULT
+    },
+    {
+      label: "Low",
+      value: config.ADMIN_CHAT_CODEX_REASONING_EFFORT.LOW
+    },
+    {
+      label: "Medium",
+      value: config.ADMIN_CHAT_CODEX_REASONING_EFFORT.MEDIUM
+    },
+    {
+      label: "High",
+      value: config.ADMIN_CHAT_CODEX_REASONING_EFFORT.HIGH
+    }
+  ];
+}
+
 function getCodexStatusSummary(codexState = {}) {
   if (codexState.isLoading) {
     return "Checking the local ChatGPT subscription runtime...";
@@ -381,7 +426,7 @@ function getCodexStatusSummary(codexState = {}) {
   }
 
   if (!codexState.installed) {
-    return "Codex desktop is not installed on this machine.";
+    return "Codex desktop has not been detected yet. Click Refresh or Sign In to check the local Codex bridge.";
   }
 
   if (codexState.loginPending) {
@@ -518,7 +563,8 @@ const model = {
     model: "",
     paramsText: "",
     promptBudgetRatios: { ...config.DEFAULT_ADMIN_CHAT_SETTINGS.promptBudgetRatios },
-    provider: config.DEFAULT_ADMIN_CHAT_SETTINGS.provider
+    provider: config.DEFAULT_ADMIN_CHAT_SETTINGS.provider,
+    subscriptionReasoningEffort: config.DEFAULT_ADMIN_CHAT_SETTINGS.subscriptionReasoningEffort
   },
   settingsDraft: {
     apiEndpoint: "",
@@ -530,7 +576,8 @@ const model = {
     model: "",
     paramsText: "",
     promptBudgetRatios: { ...config.DEFAULT_ADMIN_CHAT_SETTINGS.promptBudgetRatios },
-    provider: config.DEFAULT_ADMIN_CHAT_SETTINGS.provider
+    provider: config.DEFAULT_ADMIN_CHAT_SETTINGS.provider,
+    subscriptionReasoningEffort: config.DEFAULT_ADMIN_CHAT_SETTINGS.subscriptionReasoningEffort
   },
   status: "Loading admin agent...",
   stopRequested: false,
@@ -638,7 +685,11 @@ const model = {
   },
 
   get canStartCodexLogin() {
-    return this.codex.installed && !this.codex.isLoading;
+    return !this.codex.isLoading;
+  },
+
+  get codexReasoningEffortOptions() {
+    return createCodexReasoningEffortOptions();
   },
 
   get huggingfaceSavedModels() {
@@ -1005,7 +1056,10 @@ const model = {
 
     this.settingsDraft = {
       ...this.settingsDraft,
-      model: defaultModel
+      model: defaultModel,
+      subscriptionReasoningEffort:
+        config.normalizeAdminChatCodexReasoningEffort(this.settingsDraft.subscriptionReasoningEffort) ||
+        config.normalizeAdminChatCodexReasoningEffort(this.codexModels[0]?.defaultReasoningEffort)
     };
     return true;
   },
@@ -1042,10 +1096,10 @@ const model = {
     }
 
     try {
-      const result = await this.runtime.api.call("codex_status", {
+      const result = await callCodexApiWithTimeout(this.runtime, "codex_status", {
         method: "GET",
         query: refreshToken ? { refreshToken: "1" } : {}
-      });
+      }, CODEX_STATUS_TIMEOUT_MS);
 
       if (requestId !== this.codexRequestId) {
         return this.codex;
@@ -1080,9 +1134,9 @@ const model = {
 
   async startCodexLogin() {
     try {
-      const result = await this.runtime.api.call("codex_login_start", {
+      const result = await callCodexApiWithTimeout(this.runtime, "codex_login_start", {
         method: "POST"
-      });
+      }, CODEX_LOGIN_TIMEOUT_MS);
       const verificationUrl = String(result?.verificationUrl || "").trim();
       const userCode = String(result?.userCode || "").trim();
 
@@ -2194,6 +2248,9 @@ const model = {
       paramsText,
       promptBudgetRatios: clonePromptBudgetRatios(this.settingsDraft.promptBudgetRatios),
       provider,
+      subscriptionReasoningEffort: config.normalizeAdminChatCodexReasoningEffort(
+        this.settingsDraft.subscriptionReasoningEffort
+      ),
       storedApiKeyLocked: this.settings.storedApiKeyLocked === true,
       storedApiKeyValue: String(this.settings.storedApiKeyValue || "")
     };

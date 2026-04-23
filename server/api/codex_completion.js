@@ -4,6 +4,7 @@ export async function post(context) {
   const body = context.body && typeof context.body === "object" ? context.body : {};
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const model = String(body.model || "").trim();
+  const reasoningEffort = String(body.reasoningEffort || "").trim();
   const systemPrompt = String(body.systemPrompt || "").trim();
 
   if (!messages.length) {
@@ -15,6 +16,7 @@ export async function post(context) {
   const stream = await createCodexCompletionStream({
     messages,
     model,
+    reasoningEffort,
     systemPrompt
   });
 

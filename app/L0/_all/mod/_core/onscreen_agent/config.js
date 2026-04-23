@@ -12,6 +12,12 @@ export const ONSCREEN_AGENT_LLM_PROVIDER = Object.freeze({
 export const ONSCREEN_AGENT_LOCAL_PROVIDER = Object.freeze({
   HUGGINGFACE: "huggingface"
 });
+export const ONSCREEN_AGENT_CODEX_REASONING_EFFORT = Object.freeze({
+  DEFAULT: "",
+  HIGH: "high",
+  LOW: "low",
+  MEDIUM: "medium"
+});
 export const ONSCREEN_AGENT_HIDDEN_EDGE = Object.freeze({
   BOTTOM: "bottom",
   LEFT: "left",
@@ -29,7 +35,8 @@ export const DEFAULT_ONSCREEN_AGENT_SETTINGS = {
   model: "anthropic/claude-sonnet-4.6",
   paramsText: "temperature:0.2",
   promptBudgetRatios: { ...DEFAULT_PROMPT_BUDGET_RATIOS },
-  provider: ONSCREEN_AGENT_LLM_PROVIDER.API
+  provider: ONSCREEN_AGENT_LLM_PROVIDER.API,
+  subscriptionReasoningEffort: ONSCREEN_AGENT_CODEX_REASONING_EFFORT.DEFAULT
 };
 
 function normalizeOnscreenAgentSettingText(value) {
@@ -50,6 +57,21 @@ export function normalizeOnscreenAgentLlmProvider(value) {
 
 export function normalizeOnscreenAgentLocalProvider(value) {
   return ONSCREEN_AGENT_LOCAL_PROVIDER.HUGGINGFACE;
+}
+
+export function normalizeOnscreenAgentCodexReasoningEffort(value) {
+  switch (String(value || "").trim()) {
+    case "minimal":
+      return ONSCREEN_AGENT_CODEX_REASONING_EFFORT.LOW;
+    case ONSCREEN_AGENT_CODEX_REASONING_EFFORT.LOW:
+      return ONSCREEN_AGENT_CODEX_REASONING_EFFORT.LOW;
+    case ONSCREEN_AGENT_CODEX_REASONING_EFFORT.MEDIUM:
+      return ONSCREEN_AGENT_CODEX_REASONING_EFFORT.MEDIUM;
+    case ONSCREEN_AGENT_CODEX_REASONING_EFFORT.HIGH:
+      return ONSCREEN_AGENT_CODEX_REASONING_EFFORT.HIGH;
+    default:
+      return ONSCREEN_AGENT_CODEX_REASONING_EFFORT.DEFAULT;
+  }
 }
 
 export function createOnscreenAgentHuggingFaceSelectionValue(modelId, dtype) {

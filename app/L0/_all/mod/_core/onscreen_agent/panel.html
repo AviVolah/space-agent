@@ -415,6 +415,17 @@
                           Uses the local Codex desktop sign-in and streams through your ChatGPT subscription.
                         </p>
                       </label>
+                      <label class="field">
+                        <span>Thinking Effort</span>
+                        <select x-model="$store.onscreenAgent.settingsDraft.subscriptionReasoningEffort">
+                          <template x-for="option in $store.onscreenAgent.codexReasoningEffortOptions" :key="option.value || 'default'">
+                            <option :value="option.value" x-text="option.label"></option>
+                          </template>
+                        </select>
+                        <p class="field-note">
+                          Leave this on model default to use Codex's recommended effort for the selected subscription model.
+                        </p>
+                      </label>
                     </div>
                     <label class="field">
                       <span>Max Tokens</span>

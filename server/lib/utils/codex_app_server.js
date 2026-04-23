@@ -4,6 +4,7 @@ import { PassThrough } from "node:stream";
 import os from "node:os";
 import path from "node:path";
 
+const CODEX_RUNTIME_COMMAND = "codex";
 const BRIDGE_SYSTEM_PREFIX = [
   "You are acting only as the authenticated model transport for another application.",
   "Do not use tools, commands, files, apps, plugins, MCP servers, or any other side effects.",
@@ -140,6 +141,18 @@ function writeSseChunk(stream, data) {
   stream.write(`data: ${data}\n\n`);
 }
 
+function createStreamingErrorPayload(message) {
+  return JSON.stringify({
+    error: {
+      message: String(message || "Codex completion stream failed.")
+    }
+  });
+}
+
+function extractRouteTurnId(params = {}) {
+  return String(params?.turnId || params?.turn?.id || "").trim();
+}
+
 function getCodexThreadCwd() {
   return process.env.TEMP || process.env.TMPDIR || os.tmpdir();
 }
@@ -259,6 +272,26 @@ function isCodexInstalled() {
   return Boolean(readCodexVersion());
 }
 
+function killCodexChildProcess(child) {
+  if (!child || child.killed) {
+    return;
+  }
+
+  if (process.platform === "win32" && child.pid !== undefined) {
+    try {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true
+      });
+      return;
+    } catch {
+      // Fall through to direct kill when taskkill is unavailable.
+    }
+  }
+
+  child.kill();
+}
+
 export class CodexAppServerConnection extends EventEmitter {
   constructor() {
     super();
@@ -275,19 +308,14 @@ export class CodexAppServerConnection extends EventEmitter {
       return this.initializePromise;
     }
 
-    const codexCommand = getCodexCommand();
-
-    if (!codexCommand) {
-      throw createCodexUnavailableError();
-    }
-
-    this.initializePromise = this.spawnAndInitialize(codexCommand);
+    this.initializePromise = this.spawnAndInitialize(resolveCodexCommand() || CODEX_RUNTIME_COMMAND);
     return this.initializePromise;
   }
 
   async spawnAndInitialize(codexCommand) {
     this.child = spawn(codexCommand, ["app-server"], {
       env: process.env,
+      shell: process.platform === "win32",
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true
     });
@@ -321,7 +349,7 @@ export class CodexAppServerConnection extends EventEmitter {
       this.child.stderr.resume();
     }
 
-    await this.call("initialize", {
+    await this.callRpc("initialize", {
       capabilities: {},
       clientInfo: {
         name: "space-agent",
@@ -396,8 +424,10 @@ export class CodexAppServerConnection extends EventEmitter {
     this.child.stdin.write(`${JSON.stringify({ method, params })}\n`);
   }
 
-  async call(method, params = {}) {
-    await this.start();
+  callRpc(method, params = {}) {
+    if (!this.child?.stdin || this.child.stdin.destroyed) {
+      return Promise.reject(new Error("Codex app-server stdin is unavailable."));
+    }
 
     return new Promise((resolve, reject) => {
       const requestId = this.nextRequestId++;
@@ -416,12 +446,18 @@ export class CodexAppServerConnection extends EventEmitter {
     });
   }
 
+  async call(method, params = {}) {
+    await this.start();
+
+    return this.callRpc(method, params);
+  }
+
   async dispose() {
     this.closed = true;
     this.initializePromise = null;
 
     if (this.child && !this.child.killed) {
-      this.child.kill();
+      killCodexChildProcess(this.child);
     }
 
     this.child = null;
@@ -487,23 +523,7 @@ function normalizeModelList(result = {}) {
 }
 
 export async function readCodexStatus(options = {}) {
-  const version = readCodexVersion();
-
-  if (!version) {
-    return {
-      account: null,
-      authenticated: false,
-      error: "",
-      installed: false,
-      loginError: "",
-      loginPending: false,
-      models: [],
-      ready: false,
-      requiresOpenaiAuth: true,
-      runtimeStatus: "missing",
-      version: ""
-    };
-  }
+  const version = readCodexVersion() || "";
 
   try {
     const connection = await getSharedConnection();
@@ -542,6 +562,24 @@ export async function readCodexStatus(options = {}) {
       version
     };
   } catch (error) {
+    if (!version) {
+      return {
+        account: null,
+        authenticated: false,
+        error: "",
+        installed: false,
+        loginError: "",
+        loginPending: false,
+        loginUserCode: "",
+        loginVerificationUrl: "",
+        models: [],
+        ready: false,
+        requiresOpenaiAuth: true,
+        runtimeStatus: "missing",
+        version: ""
+      };
+    }
+
     return {
       account: null,
       authenticated: false,
@@ -561,10 +599,6 @@ export async function readCodexStatus(options = {}) {
 }
 
 export async function startCodexLogin() {
-  if (!isCodexInstalled()) {
-    throw createCodexUnavailableError();
-  }
-
   const connection = await getSharedConnection();
   const result = await connection.call("account/login/start", {
     type: "chatgptDeviceCode"
@@ -636,16 +670,17 @@ async function createCompletionSession(options = {}) {
 
   const turnStartResult = await connection.call("turn/start", {
     approvalPolicy: "never",
+    ...(String(options.reasoningEffort || "").trim()
+      ? { effort: String(options.reasoningEffort || "").trim() }
+      : {}),
     input: [
       {
+        text_elements: [],
         text: lastMessage.content,
         type: "text"
       }
     ],
     model: String(options.model || "").trim() || null,
-    outputSchema: {
-      type: "string"
-    },
     personality: "none",
     sandboxPolicy: {
       access: {
@@ -673,10 +708,6 @@ async function createCompletionSession(options = {}) {
 }
 
 export async function createCodexCompletionStream(options = {}) {
-  if (!isCodexInstalled()) {
-    throw createCodexUnavailableError();
-  }
-
   const { connection, turnId } = await createCompletionSession(options);
   const stream = new PassThrough();
   let sawDelta = false;
@@ -695,7 +726,9 @@ export async function createCodexCompletionStream(options = {}) {
 
   async function fail(error) {
     if (!stream.destroyed && !stream.writableEnded) {
-      stream.destroy(error);
+      writeSseChunk(stream, createStreamingErrorPayload(error?.message || "Codex completion stream failed."));
+      writeSseChunk(stream, "[DONE]");
+      stream.end();
     }
 
     await cleanup();
@@ -708,8 +741,9 @@ export async function createCodexCompletionStream(options = {}) {
   function handleNotification(notification = {}) {
     const method = String(notification?.method || "").trim();
     const params = notification?.params || {};
+    const notificationTurnId = extractRouteTurnId(params);
 
-    if (String(params?.turnId || "").trim() !== turnId) {
+    if (notificationTurnId !== turnId) {
       return;
     }
 
@@ -747,6 +781,17 @@ export async function createCodexCompletionStream(options = {}) {
       writeSseChunk(stream, "[DONE]");
       stream.end();
       void cleanup();
+      return;
+    }
+
+    if (method === "turn/aborted") {
+      void fail(new Error("Codex turn was aborted before completion."));
+      return;
+    }
+
+    if (method === "error") {
+      const errorMessage = String(params?.error?.message || "").trim() || "Codex app-server reported an error.";
+      void fail(new Error(errorMessage));
     }
   }
 

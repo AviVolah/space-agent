@@ -155,6 +155,11 @@ async function normalizeStoredConfig(runtime, parsedConfig) {
       paramsText: String(storedConfig.params || storedConfig.paramsText || config.DEFAULT_ADMIN_CHAT_SETTINGS.paramsText || "").trim(),
       promptBudgetRatios: normalizeStoredPromptBudgetRatios(storedConfig),
       provider,
+      subscriptionReasoningEffort: config.normalizeAdminChatCodexReasoningEffort(
+        storedConfig.subscription_reasoning_effort ??
+          storedConfig.subscriptionReasoningEffort ??
+          config.DEFAULT_ADMIN_CHAT_SETTINGS.subscriptionReasoningEffort
+      ),
       storedApiKeyLocked: storedApiKey.locked,
       storedApiKeyValue: storedApiKey.storedValue
     },
@@ -185,7 +190,10 @@ async function buildStoredConfigPayload(runtime, { settings, systemPrompt }) {
       single_message: config.normalizeAdminChatPromptBudgetRatios(settings?.promptBudgetRatios).singleMessage,
       system: config.normalizeAdminChatPromptBudgetRatios(settings?.promptBudgetRatios).system,
       transient: config.normalizeAdminChatPromptBudgetRatios(settings?.promptBudgetRatios).transient
-    }
+    },
+    subscription_reasoning_effort: config.normalizeAdminChatCodexReasoningEffort(
+      settings?.subscriptionReasoningEffort
+    )
   };
 
   if (normalizedSystemPrompt) {

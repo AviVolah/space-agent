@@ -231,6 +231,11 @@ async function normalizeStoredConfig(runtime, parsedConfig) {
       paramsText: String(storedConfig.params || storedConfig.paramsText || config.DEFAULT_ONSCREEN_AGENT_SETTINGS.paramsText || "").trim(),
       promptBudgetRatios: normalizeStoredPromptBudgetRatios(storedConfig),
       provider,
+      subscriptionReasoningEffort: config.normalizeOnscreenAgentCodexReasoningEffort(
+        storedConfig.subscription_reasoning_effort ??
+          storedConfig.subscriptionReasoningEffort ??
+          config.DEFAULT_ONSCREEN_AGENT_SETTINGS.subscriptionReasoningEffort
+      ),
       storedApiKeyLocked: storedApiKey.locked,
       storedApiKeyValue: storedApiKey.storedValue
     },
@@ -290,7 +295,10 @@ async function buildStoredConfigPayload(runtime, { settings, systemPrompt }) {
       single_message: config.normalizeOnscreenAgentPromptBudgetRatios(settings?.promptBudgetRatios).singleMessage,
       system: config.normalizeOnscreenAgentPromptBudgetRatios(settings?.promptBudgetRatios).system,
       transient: config.normalizeOnscreenAgentPromptBudgetRatios(settings?.promptBudgetRatios).transient
-    }
+    },
+    subscription_reasoning_effort: config.normalizeOnscreenAgentCodexReasoningEffort(
+      settings?.subscriptionReasoningEffort
+    )
   };
 
   if (normalizedSystemPrompt) {
