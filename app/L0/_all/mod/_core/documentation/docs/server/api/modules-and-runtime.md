@@ -141,7 +141,7 @@ Important runtime endpoints:
 - are authenticated runtime endpoints used by the first-party admin and onscreen chat surfaces when the user selects the `Subscription` provider
 - delegate all local Codex desktop process management and JSON-RPC details to `server/lib/utils/codex_app_server.js`
 - let the browser check whether Codex desktop is installed, whether it is signed in to ChatGPT, and which subscription-backed models are currently available
-- start the local ChatGPT sign-in flow through Codex and return the browser-openable auth URL
+- start Codex's documented ChatGPT device-code login flow and return the verification URL plus user code so the frontend can own the sign-in UX and avoid depending on the local callback browser flow
 - accept the already prepared Space Agent prompt payload and stream the assistant response back as SSE in an OpenAI-compatible delta shape, while keeping Space Agent itself responsible for prompt assembly, history shaping, and system-prompt construction
 
 ## Health Helper

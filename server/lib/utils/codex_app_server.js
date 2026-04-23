@@ -16,7 +16,9 @@ let sharedConnectionPromise = null;
 let sharedLoginState = {
   error: "",
   loginId: "",
-  pending: false
+  pending: false,
+  userCode: "",
+  verificationUrl: ""
 };
 let cachedCodexCommand = undefined;
 let cachedCodexVersion = undefined;
@@ -442,13 +444,17 @@ async function getSharedConnection() {
       sharedLoginState = {
         error: params?.success ? "" : String(params?.error || "Codex sign-in failed."),
         loginId: String(params?.loginId || sharedLoginState.loginId || "").trim(),
-        pending: false
+        pending: false,
+        userCode: params?.success ? "" : sharedLoginState.userCode,
+        verificationUrl: params?.success ? "" : sharedLoginState.verificationUrl
       };
     });
     connection.on("notification:account/updated", () => {
       sharedLoginState = {
         ...sharedLoginState,
-        pending: false
+        pending: false,
+        userCode: "",
+        verificationUrl: ""
       };
     });
     connection.on("closed", () => {
@@ -514,7 +520,9 @@ export async function readCodexStatus(options = {}) {
       sharedLoginState = {
         error: "",
         loginId: "",
-        pending: false
+        pending: false,
+        userCode: "",
+        verificationUrl: ""
       };
     }
 
@@ -525,6 +533,8 @@ export async function readCodexStatus(options = {}) {
       installed: true,
       loginError: sharedLoginState.error,
       loginPending: sharedLoginState.pending,
+      loginUserCode: sharedLoginState.userCode,
+      loginVerificationUrl: sharedLoginState.verificationUrl,
       models: normalizeModelList(modelResult),
       ready: authenticated,
       requiresOpenaiAuth: accountResult?.requiresOpenaiAuth !== false,
@@ -539,6 +549,8 @@ export async function readCodexStatus(options = {}) {
       installed: true,
       loginError: sharedLoginState.error,
       loginPending: sharedLoginState.pending,
+      loginUserCode: sharedLoginState.userCode,
+      loginVerificationUrl: sharedLoginState.verificationUrl,
       models: [],
       ready: false,
       requiresOpenaiAuth: true,
@@ -555,19 +567,22 @@ export async function startCodexLogin() {
 
   const connection = await getSharedConnection();
   const result = await connection.call("account/login/start", {
-    type: "chatgpt"
+    type: "chatgptDeviceCode"
   });
 
   sharedLoginState = {
     error: "",
     loginId: String(result?.loginId || "").trim(),
-    pending: true
+    pending: true,
+    userCode: String(result?.userCode || "").trim(),
+    verificationUrl: String(result?.verificationUrl || "").trim()
   };
 
   return {
-    authUrl: String(result?.authUrl || "").trim(),
     loginId: String(result?.loginId || "").trim(),
-    type: String(result?.type || "chatgpt").trim()
+    type: String(result?.type || "chatgptDeviceCode").trim(),
+    userCode: sharedLoginState.userCode,
+    verificationUrl: sharedLoginState.verificationUrl
   };
 }
 

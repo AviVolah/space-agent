@@ -324,6 +324,8 @@ function createEmptyCodexState() {
     isLoading: false,
     loginError: "",
     loginPending: false,
+    loginUserCode: "",
+    loginVerificationUrl: "",
     models: [],
     ready: false,
     requiresOpenaiAuth: false,
@@ -345,6 +347,8 @@ function normalizeCodexState(state = {}) {
     isLoading: state?.isLoading === true,
     loginError: String(state?.loginError || "").trim(),
     loginPending: state?.loginPending === true,
+    loginUserCode: String(state?.loginUserCode || "").trim(),
+    loginVerificationUrl: String(state?.loginVerificationUrl || "").trim(),
     models,
     ready: state?.ready === true,
     requiresOpenaiAuth: state?.requiresOpenaiAuth === true,
@@ -381,7 +385,9 @@ function getCodexStatusSummary(codexState = {}) {
   }
 
   if (codexState.loginPending) {
-    return "Finish the ChatGPT sign-in flow in the opened Codex window, then refresh.";
+    return codexState.loginUserCode
+      ? `Finish ChatGPT sign-in with code ${codexState.loginUserCode}, then refresh.`
+      : "Finish the ChatGPT sign-in flow, then refresh.";
   }
 
   if (!codexState.authenticated) {
@@ -1073,34 +1079,30 @@ const model = {
   },
 
   async startCodexLogin() {
-    const loginWindow = window.open("", "_blank", "noopener");
-
     try {
       const result = await this.runtime.api.call("codex_login_start", {
         method: "POST"
       });
-      const authUrl = String(result?.authUrl || "").trim();
+      const verificationUrl = String(result?.verificationUrl || "").trim();
+      const userCode = String(result?.userCode || "").trim();
 
-      if (!authUrl) {
-        throw new Error("Codex did not return a ChatGPT sign-in URL.");
+      if (!verificationUrl || !userCode) {
+        throw new Error("Codex did not return the ChatGPT device-code sign-in details.");
       }
 
       this.codex = {
         ...this.codex,
         loginError: "",
-        loginPending: true
+        loginPending: true,
+        loginUserCode: userCode,
+        loginVerificationUrl: verificationUrl
       };
-      if (loginWindow) {
-        loginWindow.location.href = authUrl;
-      } else {
-        window.open(authUrl, "_blank", "noopener");
-      }
-      this.status = "Opened the ChatGPT sign-in flow in Codex.";
+      window.open(verificationUrl, "_blank", "noopener");
+      this.status = `Opened ChatGPT device sign-in. Enter code ${userCode}.`;
       await this.refreshCodexStatus({
         preserveStatus: true
       });
     } catch (error) {
-      loginWindow?.close?.();
       this.reportError("starting the Codex ChatGPT login flow", error, {
         preserveStatus: true
       });

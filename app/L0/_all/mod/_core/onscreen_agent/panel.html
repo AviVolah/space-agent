@@ -378,6 +378,12 @@
                       <div class="field">
                         <span>ChatGPT Subscription</span>
                         <p class="field-note" x-text="$store.onscreenAgent.codexStatusSummary"></p>
+                        <div class="field-note" x-show="$store.onscreenAgent.codex.loginPending && $store.onscreenAgent.codex.loginUserCode" x-cloak>
+                          Visit
+                          <a :href="$store.onscreenAgent.codex.loginVerificationUrl" target="_blank" rel="noopener" x-text="$store.onscreenAgent.codex.loginVerificationUrl"></a>
+                          and enter code
+                          <strong x-text="$store.onscreenAgent.codex.loginUserCode"></strong>.
+                        </div>
                         <div class="dialog-actions">
                           <button
                             type="button"
