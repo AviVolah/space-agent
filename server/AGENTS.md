@@ -113,7 +113,7 @@ Current server layout:
 - `server/router/`: top-level request routing, page handling, `/mod/...` serving, direct app-file fetches, request context, response helpers, proxy transport, and CORS handling
 - `server/lib/utils/process_title.js`: canonical OS process-title helper for direct serve, clustered primary, clustered workers, and supervisor-owned runtime naming
 - `server/lib/utils/project_version.js`: shared project-version resolver for Git-tag source checkouts and package-version fallback display in page shells
-- `server/lib/utils/codex_app_server.js`: canonical local Codex desktop bridge for ChatGPT-subscription status, login, model discovery, and ephemeral completion streaming
+- `server/lib/utils/codex_app_server.js`: canonical local Codex desktop bridge for ChatGPT-subscription status, login, model discovery, and ephemeral completion streaming, including resilient Windows Codex binary detection through PATH plus standard local install locations plus `where.exe`
 - `server/lib/customware/`: logical app-path normalization, customware-root resolution, group and inheritance logic, extension override resolution, app-file access, and module management
 - `server/lib/customware/git_history.js`: optional writable-layer local Git history scheduling, repository discovery, paginated commit listing, file-diff reads, operation previews, rollback, revert, and commit-loop suppression
 - `server/lib/customware/user_quota.js`: optional per-user `L2` folder size accounting and cached quota projection helpers for app-file mutations

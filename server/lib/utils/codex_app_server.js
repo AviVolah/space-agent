@@ -2,8 +2,8 @@ import { EventEmitter } from "node:events";
 import { spawn, spawnSync } from "node:child_process";
 import { PassThrough } from "node:stream";
 import os from "node:os";
+import path from "node:path";
 
-const CODEX_COMMAND = "codex";
 const BRIDGE_SYSTEM_PREFIX = [
   "You are acting only as the authenticated model transport for another application.",
   "Do not use tools, commands, files, apps, plugins, MCP servers, or any other side effects.",
@@ -18,6 +18,7 @@ let sharedLoginState = {
   loginId: "",
   pending: false
 };
+let cachedCodexCommand = undefined;
 let cachedCodexVersion = undefined;
 
 function createCodexUnavailableError(message = "Codex is not installed on this machine.") {
@@ -141,24 +142,115 @@ function getCodexThreadCwd() {
   return process.env.TEMP || process.env.TMPDIR || os.tmpdir();
 }
 
-function readCodexVersion() {
-  if (cachedCodexVersion !== undefined) {
-    return cachedCodexVersion;
+function runCodexVersion(command) {
+  if (!command) {
+    return null;
   }
 
-  const result = spawnSync(CODEX_COMMAND, ["--version"], {
+  const result = spawnSync(command, ["--version"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"]
   });
 
   if (result.error || result.status !== 0) {
-    cachedCodexVersion = null;
-    return cachedCodexVersion;
+    return null;
   }
 
   const versionText = String(result.stdout || "").trim();
-  cachedCodexVersion = versionText || null;
+  return versionText || null;
+}
+
+function listWindowsCodexCandidates() {
+  const candidates = ["codex"];
+  const localAppData = String(process.env.LOCALAPPDATA || "").trim();
+
+  if (localAppData) {
+    candidates.push(path.join(localAppData, "OpenAI", "Codex", "bin", "codex.cmd"));
+    candidates.push(path.join(localAppData, "OpenAI", "Codex", "bin", "codex.exe"));
+  }
+
+  const whereResult = spawnSync("where.exe", ["codex"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    windowsHide: true
+  });
+
+  if (!whereResult.error && whereResult.status === 0) {
+    for (const line of String(whereResult.stdout || "").split(/\r?\n/)) {
+      const candidate = line.trim();
+
+      if (candidate) {
+        candidates.push(candidate);
+      }
+    }
+  }
+
+  return [...new Set(candidates)];
+}
+
+function listCodexCommandCandidates() {
+  if (process.platform === "win32") {
+    return listWindowsCodexCandidates();
+  }
+
+  return ["codex"];
+}
+
+function resolveCodexCommand() {
+  if (cachedCodexCommand) {
+    return cachedCodexCommand;
+  }
+
+  for (const candidate of listCodexCommandCandidates()) {
+    const version = runCodexVersion(candidate);
+
+    if (!version) {
+      continue;
+    }
+
+    cachedCodexCommand = candidate;
+    cachedCodexVersion = version;
+    return cachedCodexCommand;
+  }
+
+  return null;
+}
+
+function readCodexVersion() {
+  if (cachedCodexVersion) {
+    return cachedCodexVersion;
+  }
+
+  const command = resolveCodexCommand();
+
+  if (!command) {
+    return null;
+  }
+
+  const version = runCodexVersion(command);
+
+  if (!version) {
+    cachedCodexCommand = undefined;
+    cachedCodexVersion = undefined;
+    return null;
+  }
+
+  cachedCodexVersion = version;
   return cachedCodexVersion;
+}
+
+function getCodexCommand() {
+  const command = resolveCodexCommand();
+
+  if (!command) {
+    return null;
+  }
+
+  if (!cachedCodexVersion) {
+    cachedCodexVersion = runCodexVersion(command);
+  }
+
+  return cachedCodexVersion ? command : null;
 }
 
 function isCodexInstalled() {
@@ -181,16 +273,18 @@ export class CodexAppServerConnection extends EventEmitter {
       return this.initializePromise;
     }
 
-    if (!isCodexInstalled()) {
+    const codexCommand = getCodexCommand();
+
+    if (!codexCommand) {
       throw createCodexUnavailableError();
     }
 
-    this.initializePromise = this.spawnAndInitialize();
+    this.initializePromise = this.spawnAndInitialize(codexCommand);
     return this.initializePromise;
   }
 
-  async spawnAndInitialize() {
-    this.child = spawn(CODEX_COMMAND, ["app-server"], {
+  async spawnAndInitialize(codexCommand) {
+    this.child = spawn(codexCommand, ["app-server"], {
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true
