@@ -151,6 +151,31 @@ function normalizeTransientSections(sections) {
     });
 }
 
+function normalizeSubscriptionMessages(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .map((message) => {
+      const role =
+        message?.role === "system"
+          ? "system"
+          : message?.role === "assistant"
+            ? "assistant"
+            : message?.role === "user"
+              ? "user"
+              : "";
+      const content = extractTextContent(message?.content || "");
+
+      if (!role || !content.trim()) {
+        return null;
+      }
+
+      return {
+        content,
+        role
+      };
+    })
+    .filter(Boolean);
+}
+
 function formatTransientMessageBlock(sections) {
   const normalizedSections = normalizeTransientSections(sections);
 
@@ -496,6 +521,41 @@ async function streamAdminAgentApiCompletion({ promptContext, settings, systemPr
   return readStreamingResponse(response, onDelta);
 }
 
+async function streamAdminAgentSubscriptionCompletion({ promptContext, settings, systemPrompt, messages, onDelta, signal }) {
+  if (!String(settings?.model || "").trim()) {
+    throw new Error("Choose a subscription model before sending a message.");
+  }
+
+  const apiRequest = await prepareAdminAgentApiRequest({
+    messages,
+    promptContext,
+    settings,
+    systemPrompt
+  });
+  const response = await fetch("/api/codex_completion", {
+    body: JSON.stringify({
+      messages: normalizeSubscriptionMessages(apiRequest.requestBody?.messages),
+      model: String(settings?.model || "").trim(),
+      systemPrompt: apiRequest.systemPrompt
+    }),
+    headers: {
+      "Content-Type": "application/json"
+    },
+    method: "POST",
+    signal
+  });
+
+  if (!response.ok) {
+    await throwResponseError(response);
+  }
+
+  if (!response.body) {
+    throw new Error("Streaming response body is not available.");
+  }
+
+  return readStreamingResponse(response, onDelta);
+}
+
 export async function streamAdminAgentCompletion({ promptContext, settings, systemPrompt, messages, onDelta, signal }) {
   const provider = config.normalizeAdminChatLlmProvider(settings?.provider);
   const normalizedPromptContext = normalizeAdminPromptContext(promptContext, systemPrompt);
@@ -510,6 +570,17 @@ export async function streamAdminAgentCompletion({ promptContext, settings, syst
     });
 
     return result.responseMeta;
+  }
+
+  if (provider === config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION) {
+    return streamAdminAgentSubscriptionCompletion({
+      messages,
+      onDelta,
+      promptContext: normalizedPromptContext,
+      settings,
+      signal,
+      systemPrompt: normalizedPromptContext.systemPrompt
+    });
   }
 
   return streamAdminAgentApiCompletion({

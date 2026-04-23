@@ -76,7 +76,7 @@ Prompt rules:
 
 Current behavior:
 
-- the LLM settings modal keeps one provider switch at the top with tabs named `API` and `Local`, and shows either the API settings fields or one `Local` section
+- the LLM settings modal keeps one provider switch at the top with tabs named `API`, `Local`, and `Subscription`, and shows either the API settings fields, one `Local` section, or one Subscription section
 - the `Local` section only supports the Hugging Face browser runtime
 - the toolbar LLM settings button summarizes the current selection with the configured model name only; it does not prepend provider labels such as `API`, `Local`, or `Hugging Face`
 - the local section mounts the standalone Hugging Face config sidebar component through `<x-component>`, so the admin modal and the routed testing harness share the same component file instead of maintaining duplicated local-provider markup
@@ -92,7 +92,9 @@ Current behavior:
 - the admin HuggingFace status badge and status copy must treat the shared manager's explicit boot flag as the only `Starting` signal; an idle manager with no active load should read as `Idle` even before the worker has been booted in this page
 - when the admin agent is about to send through a local provider and the configured local model is not ready yet, the main status line should read `Loading local LLM...`; only once text deltas start arriving should it switch to `Streaming response...`
 - local-provider sends should use the same prepared prompt that API mode uses, so provider switches do not fork prompt assembly, prompt history, or transient context handling
+- subscription-provider sends should use that same prepared prompt too, but route the final folded transport payload through the local `/api/codex_completion` bridge after the user has connected Codex desktop to ChatGPT and picked an available subscription model
 - save should persist the selected local model config even when the model is not loaded yet; saving local settings should also start background load or download for the configured model, while the first admin send still acts as the fallback load trigger if that preparation has not finished yet
+- saving subscription settings should require a ready local Codex desktop ChatGPT sign-in plus a selected available subscription model; unlike local Hugging Face, there is no background preload step beyond the Codex status refresh
 - the local provider section exposes a button that opens the full Hugging Face testing chat route in a new tab for fuller inspection or experimentation, but that route is no longer the only place where local model preparation can happen
 - the settings modal keeps `maxTokens`, shared prompt-budget controls, and `paramsText` below the provider-specific sections so remote API and local HuggingFace use the same context-budget and request-params surface
 - those shared prompt-budget ratios feed the same trimming path as the onscreen agent: prepared entries and prompt items reuse cached token counts, single live history messages are capped first, contributor-level part trims must be at least `250` tokens each, and `system` or `transient` falls back to one combined section-body trim when smaller contributor cuts would be required

@@ -42,6 +42,22 @@ Current rules:
 - when `LOGIN_ALLOWED=false`, `login_challenge` still allows guest usernames when guest users are enabled, `login` still finalizes already-issued challenges, and `login_check` stays available for public session checks even though guest-bootstrap and hosted-share flows may still complete the normal background login challenge path without showing the `/login` form
 - in clustered runtime, login challenges are stored in the primary-only `login_challenge` state area while workers still validate cookies from replicated auth index shards
 
+Local Codex subscription bridge endpoints:
+
+- `codex_status`
+- `codex_login_start`
+- `codex_completion`
+
+Current rules:
+
+- these are authenticated first-party runtime endpoints for reusing a local Codex desktop ChatGPT sign-in as a subscription-backed chat transport
+- they must delegate Codex process ownership, JSON-RPC framing, login-state tracking, and model discovery to `server/lib/utils/codex_app_server.js`
+- `codex_status` is a `GET` endpoint that returns install status, authentication state, login-pending or login-error state, available models, and bridge version metadata; it may accept `refreshToken=true` to force a fresh account check
+- `codex_login_start` is a `POST` endpoint that starts the local ChatGPT login flow through Codex and returns the auth URL plus login id
+- `codex_completion` is a `POST` streaming endpoint that accepts `{ messages, model, systemPrompt }`, creates an isolated ephemeral Codex thread-turn session, injects the provided conversation history, and returns SSE chunks in an OpenAI-compatible delta shape ending with `[DONE]`
+- the completion bridge must keep Space Agent in control of prompt assembly and history shaping; Codex is only the authenticated transport endpoint for the final prepared payload
+- completion sessions must run in an isolated temp working directory with no writable workspace access, no network, `approvalPolicy: "never"`, and no tool-use expectations so the bridge behaves like a text-only subscribed model call rather than a repo-aware agent turn
+
 App-file endpoints:
 
 - `file_list`
@@ -123,6 +139,9 @@ Runtime and identity endpoints:
 - `user_crypto_bootstrap`
 - `user_crypto_session_key`
 - `user_self_info`
+- `codex_status`
+- `codex_login_start`
+- `codex_completion`
 
 Important notes:
 

@@ -298,13 +298,138 @@ function createEmptyHuggingFaceState() {
   return mapManagerStateToAdminState(huggingfaceManager.getSnapshot());
 }
 
-function summarizeAdminAgentLlmSelection(settings, huggingfaceState) {
+function normalizeCodexModelEntry(model = {}) {
+  const modelId = String(model?.model || model?.id || "").trim();
+  const displayName = String(model?.displayName || modelId).trim();
+
+  if (!modelId) {
+    return null;
+  }
+
+  return {
+    defaultReasoningEffort: String(model?.defaultReasoningEffort || "").trim(),
+    description: String(model?.description || "").trim(),
+    displayName: displayName || modelId,
+    id: String(model?.id || modelId).trim(),
+    model: modelId
+  };
+}
+
+function createEmptyCodexState() {
+  return {
+    account: null,
+    authenticated: false,
+    error: "",
+    installed: false,
+    isLoading: false,
+    loginError: "",
+    loginPending: false,
+    models: [],
+    ready: false,
+    requiresOpenaiAuth: false,
+    status: "unknown",
+    version: ""
+  };
+}
+
+function normalizeCodexState(state = {}) {
+  const models = (Array.isArray(state?.models) ? state.models : [])
+    .map((model) => normalizeCodexModelEntry(model))
+    .filter(Boolean);
+
+  return {
+    account: state?.account && typeof state.account === "object" ? state.account : null,
+    authenticated: state?.authenticated === true,
+    error: String(state?.error || "").trim(),
+    installed: state?.installed === true,
+    isLoading: state?.isLoading === true,
+    loginError: String(state?.loginError || "").trim(),
+    loginPending: state?.loginPending === true,
+    models,
+    ready: state?.ready === true,
+    requiresOpenaiAuth: state?.requiresOpenaiAuth === true,
+    status: String(state?.status || "").trim() || "unknown",
+    version: String(state?.version || "").trim()
+  };
+}
+
+function findCodexModel(models, modelId) {
+  const normalizedModelId = String(modelId || "").trim();
+
+  if (!normalizedModelId) {
+    return null;
+  }
+
+  return (Array.isArray(models) ? models : []).find((model) => model.model === normalizedModelId) || null;
+}
+
+function getSubscriptionProviderLabel() {
+  return "ChatGPT subscription";
+}
+
+function getCodexStatusSummary(codexState = {}) {
+  if (codexState.isLoading) {
+    return "Checking the local ChatGPT subscription runtime...";
+  }
+
+  if (!codexState.installed) {
+    return "Codex desktop is not installed on this machine.";
+  }
+
+  if (codexState.loginPending) {
+    return "Finish the ChatGPT sign-in flow in the opened Codex window, then refresh.";
+  }
+
+  if (!codexState.authenticated) {
+    return "Codex is installed, but it is not signed in to ChatGPT yet.";
+  }
+
+  if (!codexState.models.length) {
+    return "Signed in through Codex, but no subscription-backed models are available yet.";
+  }
+
+  return "Signed in through Codex. Choose a model and save to use your ChatGPT subscription here.";
+}
+
+function assertCodexSubscriptionReady(codexState = {}, modelId = "") {
+  const normalizedModelId = String(modelId || "").trim();
+
+  if (!codexState.installed) {
+    throw new Error("Install Codex desktop before using Subscription.");
+  }
+
+  if (codexState.loginPending) {
+    throw new Error("Finish the ChatGPT sign-in flow in Codex before continuing.");
+  }
+
+  if (!codexState.authenticated) {
+    throw new Error("Sign in to ChatGPT in Codex before using Subscription.");
+  }
+
+  if (!normalizedModelId) {
+    throw new Error("Choose a subscription model before continuing.");
+  }
+
+  if (!codexState.models.length) {
+    throw new Error("No subscription models are available from Codex yet.");
+  }
+
+  if (!findCodexModel(codexState.models, normalizedModelId)) {
+    throw new Error("Choose one of the available subscription models from Codex.");
+  }
+}
+
+function summarizeAdminAgentLlmSelection(settings, huggingfaceState, codexState) {
   const provider = config.normalizeAdminChatLlmProvider(settings?.provider);
 
   if (provider === config.ADMIN_CHAT_LLM_PROVIDER.LOCAL) {
     const activeModelId = typeof huggingfaceState?.activeModelId === "string" ? huggingfaceState.activeModelId.trim() : "";
     const configuredModelId = normalizeHuggingFaceModelInput(settings?.huggingfaceModel || "");
     return configuredModelId || activeModelId || "No model";
+  }
+
+  if (provider === config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION) {
+    return String(settings?.model || "").trim() || getSubscriptionProviderLabel();
   }
 
   return agentView.summarizeLlmConfig(settings?.apiEndpoint || "", settings?.model || "");
@@ -338,6 +463,8 @@ const model = {
   draftAttachments: [],
   executionContext: null,
   executionOutputOverrides: Object.create(null),
+  codex: createEmptyCodexState(),
+  codexRequestId: 0,
   history: [],
   historyText: "",
   historyTokenCount: 0,
@@ -473,7 +600,7 @@ const model = {
   },
 
   get llmSummary() {
-    return summarizeAdminAgentLlmSelection(this.settings, this.huggingface);
+    return summarizeAdminAgentLlmSelection(this.settings, this.huggingface, this.codex);
   },
 
   get isSettingsDraftUsingApiProvider() {
@@ -482,6 +609,26 @@ const model = {
 
   get isSettingsDraftUsingLocalProvider() {
     return config.normalizeAdminChatLlmProvider(this.settingsDraft.provider) === config.ADMIN_CHAT_LLM_PROVIDER.LOCAL;
+  },
+
+  get isSettingsDraftUsingSubscriptionProvider() {
+    return config.normalizeAdminChatLlmProvider(this.settingsDraft.provider) === config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION;
+  },
+
+  get codexModels() {
+    return Array.isArray(this.codex.models) ? this.codex.models : [];
+  },
+
+  get codexStatusSummary() {
+    return getCodexStatusSummary(this.codex);
+  },
+
+  get canRefreshCodexStatus() {
+    return !this.codex.isLoading;
+  },
+
+  get canStartCodexLogin() {
+    return this.codex.installed && !this.codex.isLoading;
   },
 
   get huggingfaceSavedModels() {
@@ -835,6 +982,133 @@ const model = {
     return null;
   },
 
+  setDefaultCodexDraftModel() {
+    if (!this.isSettingsDraftUsingSubscriptionProvider || String(this.settingsDraft.model || "").trim()) {
+      return false;
+    }
+
+    const defaultModel = this.codexModels[0]?.model || "";
+
+    if (!defaultModel) {
+      return false;
+    }
+
+    this.settingsDraft = {
+      ...this.settingsDraft,
+      model: defaultModel
+    };
+    return true;
+  },
+
+  isConfiguredSubscriptionReady(settings = this.settings) {
+    const provider = config.normalizeAdminChatLlmProvider(settings?.provider);
+
+    if (provider !== config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION) {
+      return false;
+    }
+
+    try {
+      assertCodexSubscriptionReady(this.codex, settings?.model);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  async refreshCodexStatus(options = {}) {
+    const requestId = this.codexRequestId + 1;
+    const preserveStatus = options.preserveStatus === true;
+    const refreshToken = options.refreshToken === true;
+
+    this.codexRequestId = requestId;
+    this.codex = {
+      ...this.codex,
+      error: "",
+      isLoading: true
+    };
+
+    if (!preserveStatus) {
+      this.status = "Checking ChatGPT subscription...";
+    }
+
+    try {
+      const result = await this.runtime.api.call("codex_status", {
+        method: "GET",
+        query: refreshToken ? { refreshToken: "1" } : {}
+      });
+
+      if (requestId !== this.codexRequestId) {
+        return this.codex;
+      }
+
+      this.codex = normalizeCodexState(result);
+      this.setDefaultCodexDraftModel();
+
+      if (!preserveStatus) {
+        this.status = this.codex.installed ? "Subscription status updated." : "Codex desktop was not found.";
+      }
+
+      return this.codex;
+    } catch (error) {
+      if (requestId !== this.codexRequestId) {
+        return this.codex;
+      }
+
+      this.codex = {
+        ...createEmptyCodexState(),
+        error: getAdminAgentErrorMessage(error, "Unable to check ChatGPT subscription status."),
+        isLoading: false
+      };
+
+      if (!preserveStatus) {
+        this.status = this.codex.error;
+      }
+
+      return this.codex;
+    }
+  },
+
+  async startCodexLogin() {
+    const loginWindow = window.open("", "_blank", "noopener");
+
+    try {
+      const result = await this.runtime.api.call("codex_login_start", {
+        method: "POST"
+      });
+      const authUrl = String(result?.authUrl || "").trim();
+
+      if (!authUrl) {
+        throw new Error("Codex did not return a ChatGPT sign-in URL.");
+      }
+
+      this.codex = {
+        ...this.codex,
+        loginError: "",
+        loginPending: true
+      };
+      if (loginWindow) {
+        loginWindow.location.href = authUrl;
+      } else {
+        window.open(authUrl, "_blank", "noopener");
+      }
+      this.status = "Opened the ChatGPT sign-in flow in Codex.";
+      await this.refreshCodexStatus({
+        preserveStatus: true
+      });
+    } catch (error) {
+      loginWindow?.close?.();
+      this.reportError("starting the Codex ChatGPT login flow", error, {
+        preserveStatus: true
+      });
+      this.codex = {
+        ...this.codex,
+        loginError: getAdminAgentErrorMessage(error, "Unable to start ChatGPT sign-in."),
+        loginPending: false
+      };
+      this.status = this.codex.loginError;
+    }
+  },
+
   hasConfiguredLocalModel(settings = this.settings) {
     if (config.normalizeAdminChatLlmProvider(settings?.provider) !== config.ADMIN_CHAT_LLM_PROVIDER.LOCAL) {
       return false;
@@ -974,6 +1248,12 @@ const model = {
         if (this.hasConfiguredLocalModel(this.settings)) {
           void this.autoLoadConfiguredLocalModel(this.settings).catch((error) => {
             this.reportError("preloading the configured local model", error);
+          });
+        }
+
+        if (config.normalizeAdminChatLlmProvider(this.settings.provider) === config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION) {
+          void this.refreshCodexStatus({
+            preserveStatus: true
           });
         }
       } catch (error) {
@@ -1644,6 +1924,13 @@ const model = {
       this.settingsDraft.huggingfaceDtype = DTYPE_OPTIONS[0]?.value || config.DEFAULT_ADMIN_CHAT_SETTINGS.huggingfaceDtype;
     }
 
+    if (this.isSettingsDraftUsingSubscriptionProvider) {
+      void this.refreshCodexStatus({
+        preserveStatus: true,
+        refreshToken: true
+      });
+    }
+
     void this.warmSettingsDraftLocalProvider()
       .catch((error) => {
         this.reportError("warming the local-provider settings draft", error);
@@ -1665,6 +1952,13 @@ const model = {
       this.prefillSettingsDraftDefaultHuggingFaceModel();
       void this.warmSettingsDraftLocalProvider().catch((error) => {
         this.reportError("warming the local-provider settings draft", error);
+      });
+    }
+
+    if (this.isSettingsDraftUsingSubscriptionProvider) {
+      void this.refreshCodexStatus({
+        preserveStatus: true,
+        refreshToken: true
       });
     }
   },
@@ -1869,6 +2163,15 @@ const model = {
           throw new Error("Choose a Hugging Face model and dtype before saving.");
         }
       }
+
+      if (provider === config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION) {
+        const codexStatus = await this.refreshCodexStatus({
+          preserveStatus: true,
+          refreshToken: true
+        });
+
+        assertCodexSubscriptionReady(codexStatus, this.settingsDraft.model);
+      }
     } catch (error) {
       this.reportError("validating admin chat settings", error);
       return;
@@ -1891,9 +2194,12 @@ const model = {
 
     try {
       await this.persistConfig();
-      this.status = provider === config.ADMIN_CHAT_LLM_PROVIDER.LOCAL
-        ? `Local ${getConfiguredLocalProviderLabel(this.settings)} settings updated. Preparing the selected model in the background.`
-        : "API LLM settings updated.";
+      this.status =
+        provider === config.ADMIN_CHAT_LLM_PROVIDER.LOCAL
+          ? `Local ${getConfiguredLocalProviderLabel(this.settings)} settings updated. Preparing the selected model in the background.`
+          : provider === config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION
+            ? `${getSubscriptionProviderLabel()} settings updated.`
+            : "API LLM settings updated.";
       this.closeSettingsDialog();
 
       if (provider === config.ADMIN_CHAT_LLM_PROVIDER.LOCAL) {
@@ -1952,6 +2258,8 @@ const model = {
     let hasSeenDelta = false;
     const usingLocalProvider =
       config.normalizeAdminChatLlmProvider(this.settings.provider) === config.ADMIN_CHAT_LLM_PROVIDER.LOCAL;
+    const usingSubscriptionProvider =
+      config.normalizeAdminChatLlmProvider(this.settings.provider) === config.ADMIN_CHAT_LLM_PROVIDER.SUBSCRIPTION;
 
     if (usingLocalProvider) {
       const localModelReady = this.isConfiguredLocalModelReady(this.settings);
@@ -1963,6 +2271,14 @@ const model = {
           ? "Running local LLM..."
           : "Loading local LLM...";
       }
+    } else if (usingSubscriptionProvider) {
+      this.status = "Checking ChatGPT subscription...";
+      const codexStatus = await this.refreshCodexStatus({
+        preserveStatus: true,
+        refreshToken: true
+      });
+      assertCodexSubscriptionReady(codexStatus, this.settings.model);
+      this.status = "Streaming response...";
     } else {
       this.status = "Streaming response...";
     }

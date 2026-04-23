@@ -81,6 +81,9 @@ Important runtime endpoints:
 - `user_crypto_bootstrap`
 - `user_crypto_session_key`
 - `user_self_info`
+- `codex_status`
+- `codex_login_start`
+- `codex_completion`
 
 `extensions_load`:
 
@@ -132,6 +135,14 @@ Important runtime endpoints:
 - returns the session-derived wrapping key created by hashing the live backend `sessionId` with the server-held session secret
 - lets `_core/user_crypto` restore the unlocked browser key from the encrypted `localStorage` blob without storing that wrapping key at rest
 - does not persist per-session restore grants or any backend copy of the user master key
+
+`codex_status`, `codex_login_start`, and `codex_completion`:
+
+- are authenticated runtime endpoints used by the first-party admin and onscreen chat surfaces when the user selects the `Subscription` provider
+- delegate all local Codex desktop process management and JSON-RPC details to `server/lib/utils/codex_app_server.js`
+- let the browser check whether Codex desktop is installed, whether it is signed in to ChatGPT, and which subscription-backed models are currently available
+- start the local ChatGPT sign-in flow through Codex and return the browser-openable auth URL
+- accept the already prepared Space Agent prompt payload and stream the assistant response back as SSE in an OpenAI-compatible delta shape, while keeping Space Agent itself responsible for prompt assembly, history shaping, and system-prompt construction
 
 ## Health Helper
 

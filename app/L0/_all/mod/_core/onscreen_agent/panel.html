@@ -162,8 +162,8 @@
                           type="button"
                           class="onscreen-agent-set-api-key-button"
                           @click="$store.onscreenAgent.openSettingsDialog()"
+                          x-text="$store.onscreenAgent.subscriptionSetupButtonLabel"
                         >
-                          Set LLM API key
                         </button>
                       </div>
                     </template>
@@ -346,6 +346,14 @@
                       >
                         <span>Local</span>
                       </button>
+                      <button
+                        type="button"
+                        class="secondary-button dialog-segmented-button"
+                        :class="{ 'is-active': $store.onscreenAgent.isSettingsDraftUsingSubscriptionProvider }"
+                        @click="$store.onscreenAgent.setSettingsProvider('subscription')"
+                      >
+                        <span>Subscription</span>
+                      </button>
                     </div>
                     <div x-show="$store.onscreenAgent.isSettingsDraftUsingApiProvider" x-cloak>
                       <label class="field">
@@ -365,6 +373,42 @@
                       <div class="onscreen-agent-local-provider-panel">
                         <x-component path="/mod/_core/huggingface/config-sidebar.html" mode="onscreen"></x-component>
                       </div>
+                    </div>
+                    <div x-show="$store.onscreenAgent.isSettingsDraftUsingSubscriptionProvider" x-cloak>
+                      <div class="field">
+                        <span>ChatGPT Subscription</span>
+                        <p class="field-note" x-text="$store.onscreenAgent.codexStatusSummary"></p>
+                        <div class="dialog-actions">
+                          <button
+                            type="button"
+                            class="secondary-button"
+                            :disabled="!$store.onscreenAgent.canRefreshCodexStatus"
+                            @click="$store.onscreenAgent.refreshCodexStatus({ refreshToken: true })"
+                          >
+                            Refresh
+                          </button>
+                          <button
+                            type="button"
+                            class="secondary-button"
+                            :disabled="!$store.onscreenAgent.canStartCodexLogin"
+                            @click="$store.onscreenAgent.startCodexLogin()"
+                          >
+                            Sign In
+                          </button>
+                        </div>
+                      </div>
+                      <label class="field">
+                        <span>Model Name</span>
+                        <select x-model="$store.onscreenAgent.settingsDraft.model">
+                          <option value="">Choose a subscription model</option>
+                          <template x-for="model in $store.onscreenAgent.codexModels" :key="model.id">
+                            <option :value="model.model" x-text="model.displayName"></option>
+                          </template>
+                        </select>
+                        <p class="field-note">
+                          Uses the local Codex desktop sign-in and streams through your ChatGPT subscription.
+                        </p>
+                      </label>
                     </div>
                     <label class="field">
                       <span>Max Tokens</span>
@@ -443,7 +487,7 @@
                         x-model="$store.onscreenAgent.settingsDraft.paramsText"
                       ></textarea>
                       <p class="field-note">
-                        YAML format. Passed through to the active provider. Example: <code>temperature:0.2</code>
+                        YAML format. Passed through to the API and local providers. Example: <code>temperature:0.2</code>
                       </p>
                     </label>
                     <label class="field">

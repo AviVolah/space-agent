@@ -196,6 +196,14 @@
                     >
                       <span>Local</span>
                     </button>
+                    <button
+                      type="button"
+                      class="secondary-button dialog-segmented-button"
+                      :class="{ 'is-active': $store.adminAgent.isSettingsDraftUsingSubscriptionProvider }"
+                      @click="$store.adminAgent.setSettingsProvider('subscription')"
+                    >
+                      <span>Subscription</span>
+                    </button>
                   </div>
                   <div x-show="$store.adminAgent.isSettingsDraftUsingApiProvider" x-cloak>
                     <label class="field">
@@ -215,6 +223,42 @@
                     <div class="admin-agent-local-provider-panel">
                       <x-component path="/mod/_core/huggingface/config-sidebar.html" mode="admin"></x-component>
                     </div>
+                  </div>
+                  <div x-show="$store.adminAgent.isSettingsDraftUsingSubscriptionProvider" x-cloak>
+                    <div class="field">
+                      <span>ChatGPT Subscription</span>
+                      <p class="field-note" x-text="$store.adminAgent.codexStatusSummary"></p>
+                      <div class="dialog-actions">
+                        <button
+                          type="button"
+                          class="secondary-button"
+                          :disabled="!$store.adminAgent.canRefreshCodexStatus"
+                          @click="$store.adminAgent.refreshCodexStatus({ refreshToken: true })"
+                        >
+                          Refresh
+                        </button>
+                        <button
+                          type="button"
+                          class="secondary-button"
+                          :disabled="!$store.adminAgent.canStartCodexLogin"
+                          @click="$store.adminAgent.startCodexLogin()"
+                        >
+                          Sign In
+                        </button>
+                      </div>
+                    </div>
+                    <label class="field">
+                      <span>Model Name</span>
+                      <select x-model="$store.adminAgent.settingsDraft.model">
+                        <option value="">Choose a subscription model</option>
+                        <template x-for="model in $store.adminAgent.codexModels" :key="model.id">
+                          <option :value="model.model" x-text="model.displayName"></option>
+                        </template>
+                      </select>
+                      <p class="field-note">
+                        Uses the local Codex desktop sign-in and streams through your ChatGPT subscription.
+                      </p>
+                    </label>
                   </div>
                   <label class="field">
                     <span>Max Tokens</span>
@@ -293,7 +337,7 @@
                       x-model="$store.adminAgent.settingsDraft.paramsText"
                     ></textarea>
                     <p class="field-note">
-                      YAML format. Passed through to the active provider. Example: <code>temperature:0.2</code>
+                      YAML format. Passed through to the API and local providers. Example: <code>temperature:0.2</code>
                     </p>
                   </label>
                   <p class="dialog-note">

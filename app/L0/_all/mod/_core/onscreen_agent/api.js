@@ -211,6 +211,10 @@ function normalizeCompletionMessagesForLocal(messages) {
     .filter(Boolean);
 }
 
+function normalizeCompletionMessagesForSubscription(messages) {
+  return normalizeCompletionMessagesForLocal(messages);
+}
+
 function createApiRequestHeaders(apiKey) {
   const headers = {
     "Content-Type": "application/json"
@@ -406,6 +410,57 @@ export class OnscreenAgentLocalLlmClient extends OnscreenAgentLlmClient {
   }
 }
 
+export class OnscreenAgentSubscriptionLlmClient extends OnscreenAgentLlmClient {
+  validateSettings(settings = this.settings) {
+    if (!String(settings?.model || "").trim()) {
+      throw new Error("Choose a subscription model before sending a message.");
+    }
+  }
+
+  getCompletionMessages(preparedRequest) {
+    const requestBodyMessages = Array.isArray(preparedRequest?.requestBody?.messages)
+      ? preparedRequest.requestBody.messages
+      : [];
+    const requestMessages = Array.isArray(preparedRequest?.messages) ? preparedRequest.messages : [];
+
+    return normalizeCompletionMessagesForSubscription(requestBodyMessages.length ? requestBodyMessages : requestMessages);
+  }
+
+  async streamCompletion(options = {}) {
+    const onDelta = typeof options.onDelta === "function" ? options.onDelta : () => {};
+    const effectiveRequest = await this.resolvePreparedRequest(options);
+    const effectiveSettings =
+      effectiveRequest?.settings && typeof effectiveRequest.settings === "object"
+        ? effectiveRequest.settings
+        : this.settings;
+
+    this.validateSettings(effectiveSettings);
+
+    const response = await fetch("/api/codex_completion", {
+      body: JSON.stringify({
+        messages: this.getCompletionMessages(effectiveRequest),
+        model: String(effectiveSettings?.model || "").trim(),
+        systemPrompt: typeof effectiveRequest?.systemPrompt === "string" ? effectiveRequest.systemPrompt : ""
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST",
+      signal: options.signal
+    });
+
+    if (!response.ok) {
+      await throwResponseError(response);
+    }
+
+    if (!response.body) {
+      throw new Error("Streaming response body is not available.");
+    }
+
+    return readStreamingResponse(response, onDelta);
+  }
+}
+
 export const prepareOnscreenAgentApiRequest = globalThis.space.extend(
   import.meta,
   async function prepareOnscreenAgentApiRequest({ preparedRequest, settings } = {}) {
@@ -446,6 +501,12 @@ export function createOnscreenAgentLlmClient(settings = config.DEFAULT_ONSCREEN_
 
   if (provider === config.ONSCREEN_AGENT_LLM_PROVIDER.LOCAL) {
     return new OnscreenAgentLocalLlmClient({
+      settings
+    });
+  }
+
+  if (provider === config.ONSCREEN_AGENT_LLM_PROVIDER.SUBSCRIPTION) {
+    return new OnscreenAgentSubscriptionLlmClient({
       settings
     });
   }
