@@ -882,6 +882,10 @@ function getCodexStatusSummary(codexState = {}) {
     return "Checking the local ChatGPT subscription runtime...";
   }
 
+  if (String(codexState.error || "").trim()) {
+    return String(codexState.error).trim();
+  }
+
   if (!codexState.installed) {
     return "Codex desktop is not installed on this machine.";
   }
@@ -3212,7 +3216,7 @@ const model = {
       }
 
       this.codex = {
-        ...createEmptyCodexState(),
+        ...this.codex,
         error: getOnscreenAgentErrorMessage(error, "Unable to check ChatGPT subscription status."),
         isLoading: false
       };

@@ -405,37 +405,53 @@ export async function readCodexStatus(options = {}) {
     };
   }
 
-  const connection = await getSharedConnection();
-  const [accountResult, modelResult] = await Promise.all([
-    connection.call("account/read", {
-      refreshToken: options.refreshToken === true
-    }),
-    connection.call("model/list", {})
-  ]);
-  const account = accountResult?.account || null;
-  const authenticated = account?.type === "chatgpt";
+  try {
+    const connection = await getSharedConnection();
+    const [accountResult, modelResult] = await Promise.all([
+      connection.call("account/read", {
+        refreshToken: options.refreshToken === true
+      }),
+      connection.call("model/list", {})
+    ]);
+    const account = accountResult?.account || null;
+    const authenticated = account?.type === "chatgpt";
 
-  if (authenticated) {
-    sharedLoginState = {
+    if (authenticated) {
+      sharedLoginState = {
+        error: "",
+        loginId: "",
+        pending: false
+      };
+    }
+
+    return {
+      account,
+      authenticated,
       error: "",
-      loginId: "",
-      pending: false
+      installed: true,
+      loginError: sharedLoginState.error,
+      loginPending: sharedLoginState.pending,
+      models: normalizeModelList(modelResult),
+      ready: authenticated,
+      requiresOpenaiAuth: accountResult?.requiresOpenaiAuth !== false,
+      runtimeStatus: authenticated ? "ready" : "unauthenticated",
+      version
+    };
+  } catch (error) {
+    return {
+      account: null,
+      authenticated: false,
+      error: String(error?.message || "Codex desktop is installed, but its local app-server bridge failed."),
+      installed: true,
+      loginError: sharedLoginState.error,
+      loginPending: sharedLoginState.pending,
+      models: [],
+      ready: false,
+      requiresOpenaiAuth: true,
+      runtimeStatus: "error",
+      version
     };
   }
-
-  return {
-    account,
-    authenticated,
-    error: "",
-    installed: true,
-    loginError: sharedLoginState.error,
-    loginPending: sharedLoginState.pending,
-    models: normalizeModelList(modelResult),
-    ready: authenticated,
-    requiresOpenaiAuth: accountResult?.requiresOpenaiAuth !== false,
-    runtimeStatus: authenticated ? "ready" : "unauthenticated",
-    version
-  };
 }
 
 export async function startCodexLogin() {
