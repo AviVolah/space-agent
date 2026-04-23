@@ -400,7 +400,7 @@ export async function readCodexStatus(options = {}) {
       models: [],
       ready: false,
       requiresOpenaiAuth: true,
-      status: "missing",
+      runtimeStatus: "missing",
       version: ""
     };
   }
@@ -433,7 +433,7 @@ export async function readCodexStatus(options = {}) {
     models: normalizeModelList(modelResult),
     ready: authenticated,
     requiresOpenaiAuth: accountResult?.requiresOpenaiAuth !== false,
-    status: authenticated ? "ready" : "unauthenticated",
+    runtimeStatus: authenticated ? "ready" : "unauthenticated",
     version
   };
 }

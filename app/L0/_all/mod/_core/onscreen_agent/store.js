@@ -837,7 +837,7 @@ function createEmptyCodexState() {
     models: [],
     ready: false,
     requiresOpenaiAuth: false,
-    status: "unknown",
+    runtimeStatus: "unknown",
     version: ""
   };
 }
@@ -858,7 +858,7 @@ function normalizeCodexState(state = {}) {
     models,
     ready: state?.ready === true,
     requiresOpenaiAuth: state?.requiresOpenaiAuth === true,
-    status: String(state?.status || "").trim() || "unknown",
+    runtimeStatus: String(state?.runtimeStatus || "").trim() || "unknown",
     version: String(state?.version || "").trim()
   };
 }

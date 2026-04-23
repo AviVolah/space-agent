@@ -53,6 +53,7 @@ Current rules:
 - these are authenticated first-party runtime endpoints for reusing a local Codex desktop ChatGPT sign-in as a subscription-backed chat transport
 - they must delegate Codex process ownership, JSON-RPC framing, login-state tracking, and model discovery to `server/lib/utils/codex_app_server.js`
 - `codex_status` is a `GET` endpoint that returns install status, authentication state, login-pending or login-error state, available models, and bridge version metadata; it may accept `refreshToken=true` to force a fresh account check
+- `codex_status` should return that payload inside an explicit HTTP response wrapper so router response-shape heuristics never misread bridge payload fields such as `status`
 - `codex_login_start` is a `POST` endpoint that starts the local ChatGPT login flow through Codex and returns the auth URL plus login id
 - `codex_completion` is a `POST` streaming endpoint that accepts `{ messages, model, systemPrompt }`, creates an isolated ephemeral Codex thread-turn session, injects the provided conversation history, and returns SSE chunks in an OpenAI-compatible delta shape ending with `[DONE]`
 - the completion bridge must keep Space Agent in control of prompt assembly and history shaping; Codex is only the authenticated transport endpoint for the final prepared payload

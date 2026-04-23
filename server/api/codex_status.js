@@ -7,7 +7,10 @@ export async function get(context) {
     refreshValue === "true" ||
     refreshValue === "1";
 
-  return readCodexStatus({
-    refreshToken
-  });
+  return {
+    body: await readCodexStatus({
+      refreshToken
+    }),
+    status: 200
+  };
 }
