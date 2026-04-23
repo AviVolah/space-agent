@@ -11,6 +11,11 @@
   <a href="#host"><img alt="Host yourself" height="50" src="https://img.shields.io/badge/Host%20yourself-FFFFFF?style=for-the-badge&labelColor=07111F&color=FFFFFF" /></a>
 </p>
 
+<p align="center">
+  <strong>Note:</strong> the <code>Try Live Now</code> button opens the shared public demo at <a href="https://space-agent.ai">space-agent.ai</a>.
+  It is not an automatic live deployment of this fork, so fork-only source changes will not appear there until you run or deploy this fork yourself.
+</p>
+
 <h3 align="center">Created by <a href="https://agent-zero.ai">Agent Zero</a>.</h3>
 
 <p align="center">
@@ -93,7 +98,8 @@
 
 # [space-agent.ai](https://space-agent.ai)
 
-Try our demo server with guest account.
+Try our shared public demo server with a guest account.
+It reflects the production demo environment, not the current state of this fork.
 
 ## Run it yourself
 
