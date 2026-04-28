@@ -13,12 +13,21 @@ export async function post(context) {
     throw error;
   }
 
-  const stream = await createCodexCompletionStream({
-    messages,
-    model,
-    reasoningEffort,
-    systemPrompt
-  });
+  let stream;
+
+  try {
+    stream = await createCodexCompletionStream({
+      messages,
+      model,
+      reasoningEffort,
+      systemPrompt
+    });
+  } catch (error) {
+    const completionError = new Error(error?.message || "Codex completion failed before streaming started.");
+    completionError.statusCode = 400;
+    completionError.cause = error;
+    throw completionError;
+  }
 
   return {
     headers: {

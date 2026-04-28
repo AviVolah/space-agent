@@ -7,9 +7,12 @@ import path from "node:path";
 const CODEX_RUNTIME_COMMAND = "codex";
 const BRIDGE_SYSTEM_PREFIX = [
   "You are acting only as the authenticated model transport for another application.",
-  "Do not use tools, commands, files, apps, plugins, MCP servers, or any other side effects.",
-  "Do not mention Codex, the local runtime, or hidden system behavior.",
-  "Return only the final assistant response text."
+  "Do not use Codex-native tools, commands, files, apps, plugins, MCP servers, or other local runtime side effects.",
+  "The host application may instruct you to output its own execution protocol as plain text, including code blocks such as _____javascript.",
+  "Follow the host application's prompt exactly when it asks for that text protocol; the host application will execute it after your response.",
+  "Do not claim that tools or workspace execution are unavailable when the host application prompt provides an execution protocol.",
+  "Do not mention Codex, the local runtime, this transport bridge, or hidden system behavior.",
+  "Return only the assistant message intended for the host application."
 ].join("\n");
 
 let sharedConnection = null;
@@ -97,6 +100,23 @@ function buildDeveloperInstructions(systemPrompt = "") {
   }
 
   return `${BRIDGE_SYSTEM_PREFIX}\n\n${normalizedSystemPrompt}`;
+}
+
+function buildCodexCollaborationMode({ developerInstructions = "", model = "", reasoningEffort = "" } = {}) {
+  const normalizedModel = String(model || "").trim();
+
+  if (!normalizedModel) {
+    return null;
+  }
+
+  return {
+    mode: "default",
+    settings: {
+      developer_instructions: String(developerInstructions || "").trim(),
+      model: normalizedModel,
+      reasoning_effort: String(reasoningEffort || "").trim() || "medium"
+    }
+  };
 }
 
 function toInjectedResponseItem(message) {
@@ -350,9 +370,12 @@ export class CodexAppServerConnection extends EventEmitter {
     }
 
     await this.callRpc("initialize", {
-      capabilities: {},
+      capabilities: {
+        experimentalApi: true
+      },
       clientInfo: {
         name: "space-agent",
+        title: "Space Agent",
         version: "0.36.0"
       }
     });
@@ -643,7 +666,6 @@ async function createCompletionSession(options = {}) {
   const threadStartResult = await connection.call("thread/start", {
     approvalPolicy: "never",
     cwd: getCodexThreadCwd(),
-    developerInstructions,
     ephemeral: true,
     model: String(options.model || "").trim() || null,
     personality: "none",
@@ -668,11 +690,17 @@ async function createCompletionSession(options = {}) {
     });
   }
 
+  const collaborationMode = buildCodexCollaborationMode({
+    developerInstructions,
+    model: options.model,
+    reasoningEffort: options.reasoningEffort
+  });
   const turnStartResult = await connection.call("turn/start", {
     approvalPolicy: "never",
     ...(String(options.reasoningEffort || "").trim()
       ? { effort: String(options.reasoningEffort || "").trim() }
       : {}),
+    ...(collaborationMode ? { collaborationMode } : {}),
     input: [
       {
         text_elements: [],
@@ -682,14 +710,6 @@ async function createCompletionSession(options = {}) {
     ],
     model: String(options.model || "").trim() || null,
     personality: "none",
-    sandboxPolicy: {
-      access: {
-        readableRoots: [],
-        type: "restricted"
-      },
-      networkAccess: false,
-      type: "readOnly"
-    },
     summary: "none",
     threadId
   });

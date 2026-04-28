@@ -55,6 +55,7 @@ Current rules:
 - `codex_status` is a `GET` endpoint that returns install status, authentication state, login-pending or login-error state, available models, and bridge version metadata; it may accept `refreshToken=true` to force a fresh account check
 - `codex_status` should return that payload inside an explicit HTTP response wrapper so router response-shape heuristics never misread bridge payload fields such as `status`
 - when the local Codex binary is present but the bridge handshake fails, `codex_status` should still report `installed: true` and surface the bridge failure through the payload `error` field instead of collapsing back to a fake missing-install result
+- the Codex app-server handshake must advertise `capabilities.experimentalApi: true`; turn-level `collaborationMode` is rejected without that capability
 - `codex_status`, `codex_login_start`, and `codex_completion` should not hard-gate on a separate `codex --version` precheck; they should treat live `codex app-server` reachability as the authoritative signal and use version lookup only as optional metadata
 - the underlying bridge startup must avoid recursive `start()` or `call()` re-entry during JSON-RPC `initialize`; a startup deadlock leaves the frontend stuck in a permanent loading state with both Subscription actions disabled
 - completion streaming should match Codex notification route metadata the same way the app-server does, accepting either top-level `turnId` or nested `turn.id` so valid deltas and completion notifications are not ignored
@@ -62,7 +63,10 @@ Current rules:
 - `codex_completion` is a `POST` streaming endpoint that accepts `{ messages, model, reasoningEffort, systemPrompt }`, creates an isolated ephemeral Codex thread-turn session, injects the provided conversation history, and returns SSE chunks in an OpenAI-compatible delta shape ending with `[DONE]`
 - when the bridge fails after the SSE response has started, `codex_completion` should emit an SSE error payload plus `[DONE]` instead of resetting the socket, so the UI can surface the actual bridge message instead of a generic `Failed to fetch`
 - the completion bridge must keep Space Agent in control of prompt assembly and history shaping; Codex is only the authenticated transport endpoint for the final prepared payload
-- completion sessions must run in an isolated temp working directory with no writable workspace access, no network, `approvalPolicy: "never"`, and no tool-use expectations so the bridge behaves like a text-only subscribed model call rather than a repo-aware agent turn
+- the Codex bridge developer instructions must only forbid Codex-native side effects; they must not forbid the host application's text execution protocol such as `_____javascript`, because Space Agent depends on that protocol to run browser-side workspace actions
+- completion sessions should pass host instructions through `turn/start` collaboration mode rather than `thread/start`, matching the Codex app-server request shape used by working local bridges
+- completion sessions must run in an isolated temp working directory with no writable workspace access, `approvalPolicy: "never"`, and no tool-use expectations so the bridge behaves like a text-only subscribed model call rather than a repo-aware agent turn
+- completion sessions should keep sandbox selection on `thread/start` and avoid obsolete turn-level sandbox policy shapes such as `readOnly.access`; `turn/start` should carry only the prepared input, model, reasoning effort, summary, and collaboration-mode instructions unless the current Codex app-server protocol explicitly requires more
 
 App-file endpoints:
 
